@@ -6,7 +6,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 
 class FundingRound extends Model
-{
+{   
+    const STATUS_PENDING = 'Currently in Review';
+    const STATUS_APPROVED = 'Reviewed & Approved';
+    const STATUS_REJECTED = 'Rejected';
+
     protected $fillable = [
         'user_id',
         'round_type',

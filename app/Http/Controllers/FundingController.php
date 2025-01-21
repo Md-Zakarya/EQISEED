@@ -26,7 +26,8 @@ class FundingController extends Controller
                     return [
                         'name' => strtoupper($round->round_type),
                         'fundingRaised' => $round->funding_raised,
-                        'isRaisedFromEquiseed' => $round->isRaisedFromEquiseed
+                        'isRaisedFromEquiseed' => $round->isRaisedFromEquiseed,
+                        
                     ];
                 });
     
@@ -161,18 +162,19 @@ class FundingController extends Controller
     public function newRound(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'round_type' => 'required|string|in:pre-seed,seed,series-a,series-b,series-c',
-            'current_valuation' => 'required|numeric',
-            'shares_diluted' => 'required|numeric|between:0,100',
-            'target_amount' => 'required|numeric',
-            'minimum_investment' => 'required|numeric',
-            'round_opening_date' => 'required|date',
-            'round_duration' => 'required|in:7,14,21',
-            'grace_period' => 'required|in:3,5,7',
-            'preferred_exit_strategy.*' => 'in:IPO,Strategic Acquisition,Management Buyout,Merger,Acquisition,Profit-Sharing Agreement,Partial Exit,Rolling Fund',
-            'expected_exit_time' => 'required|in:3-5,5-7,7-9',
-            'expected_returns' => 'required|numeric',
-            'additional_comments' => 'nullable|string',
+        //    'round_type' => 'required|string',
+        'round_type' => 'required|string|unique:funding_rounds,round_type,NULL,id,user_id,' . auth()->id(),
+        'current_valuation' => 'required|numeric',
+        'shares_diluted' => 'required|numeric|between:0,100',
+        'target_amount' => 'required|numeric',
+        'minimum_investment' => 'required|numeric',
+        'round_opening_date' => 'required|date',
+        'round_duration' => 'required|in:7,14,21',
+        'grace_period' => 'required|in:3,5,7',
+        'preferred_exit_strategy.*' => 'string',
+        'expected_exit_time' => 'required|in:3-5,5-7,7-9',
+        'expected_returns' => 'required|numeric',
+        'additional_comments' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -204,7 +206,7 @@ class FundingController extends Controller
                 'expected_returns' => $request->expected_returns,
                 'additional_comments' => $request->additional_comments,
                 'sequence_number' => $sequence,
-                 'approval_status' => 'pending'
+                 'approval_status' => FundingRound::STATUS_PENDING
             ]);
 
             DB::commit();
@@ -224,6 +226,69 @@ class FundingController extends Controller
         }
     }
 
+
+    public function getNewRounds()
+    {
+        try {
+            $newRounds = FundingRound::where('user_id', auth()->id())
+                ->where('form_type', 'new')
+                ->orderBy('sequence_number')
+                ->get();
+    
+            if ($newRounds->isEmpty()) {
+                $formattedRounds = collect([
+                    [
+                        'id' => '',
+                        'round_type' => '',
+                        'current_valuation' => 1000000,
+                        'shares_diluted' => 10,
+                        'target_amount' => '',
+                        'minimum_investment' => '',
+                        'round_opening_date' => '',
+                        'round_duration' => '',
+                        'grace_period' => '',
+                        'preferred_exit_strategy' => '',
+                        'expected_exit_time' => '',
+                        'expected_returns' => '',
+                        'additional_comments' => '',
+                        'approval_status' => '',
+                        'sequence_number' => ''
+                    ]
+                ]);
+            } else {
+                $formattedRounds = $newRounds->map(function ($round) {
+                    return [
+                        'id' => $round->id,
+                        'round_type' => $round->round_type,
+                        'current_valuation' => $round->current_valuation,
+                        'shares_diluted' => $round->shares_diluted,
+                        'target_amount' => $round->target_amount,
+                        'minimum_investment' => $round->minimum_investment,
+                        'round_opening_date' => $round->round_opening_date,
+                        'round_duration' => $round->round_duration,
+                        'grace_period' => $round->grace_period,
+                        'preferred_exit_strategy' => $round->preferred_exit_strategy,
+                        'expected_exit_time' => $round->expected_exit_time,
+                        'expected_returns' => $round->expected_returns,
+                        'additional_comments' => $round->additional_comments,
+                        'approval_status' => $round->approval_status,
+                        'sequence_number' => $round->sequence_number
+                    ];
+                });
+            }
+    
+            return response()->json([
+                'success' => true,
+                'data' => $formattedRounds
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error retrieving new rounds',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 
 
 }

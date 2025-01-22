@@ -22,7 +22,7 @@ class OTPController extends Controller
 
     // Generate OTP
     // $otp = rand(100000, 999999);
-    $otp = 123456;
+    $otp = 335820;
 
     // Save OTP to the database
     OTP::create([

@@ -241,7 +241,7 @@ class FundingController extends Controller
                         'id' => '',
                         'round_type' => '',
                         'current_valuation' => 1000000,
-                        'shares_diluted' => 10,
+                        'shares_diluted' => 8,
                         'target_amount' => '',
                         'minimum_investment' => '',
                         'round_opening_date' => '',

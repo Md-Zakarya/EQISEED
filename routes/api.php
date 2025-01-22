@@ -27,7 +27,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/funding/new-round', [FundingController::class, 'newRound']);
 
     Route::get('/funding/new-rounds', [FundingController::class, 'getNewRounds']);
-
+       Route::get('/getUserDetails', [AuthController::class, 'getUserProfile']);
 });
 
 });

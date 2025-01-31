@@ -11,6 +11,10 @@ class FundingRound extends Model
     const STATUS_APPROVED = 'Reviewed & Approved';
     const STATUS_REJECTED = 'Rejected';
 
+    const STATUS_CLOSED = 'Closed'; 
+    const STATUS_ACTIVE = 'Active';
+        
+
     protected $fillable = [
         'user_id',
         'round_type',
@@ -22,6 +26,7 @@ class FundingRound extends Model
         'target_amount',
         'minimum_investment',
         'round_opening_date',
+        'round_closing_date',
         'round_duration',
         'grace_period',
         'preferred_exit_strategy',

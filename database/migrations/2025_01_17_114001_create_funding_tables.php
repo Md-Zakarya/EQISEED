@@ -23,6 +23,8 @@ return new class extends Migration
             $table->decimal('target_amount', 15, 2)->nullable();
             $table->decimal('minimum_investment', 15, 2)->nullable();
             $table->date('round_opening_date')->nullable();
+            $table->date('round_closing_date')->nullable();
+            
             $table->integer('round_duration')->nullable();
             $table->integer('grace_period')->nullable();
             $table->string('preferred_exit_strategy')->nullable();
@@ -49,9 +51,19 @@ return new class extends Migration
             $table->id();
             $table->foreignId('funding_detail_id')->constrained()->onDelete('cascade');
             $table->string('name');
-            $table->decimal('amount', 15, 2);
+          
+            $table->decimal('amount_invested', 15, 2)->default(0);
+            $table->date('commitment_date')->nullable();
+            $table->integer('grace_period_days')->nullable();
+            $table->date('grace_period_end')->nullable();
+            $table->decimal('equity_percentage', 5, 2)->nullable();
+            $table->enum('status', ['invested', 'expired'])->default('invested')->nullable();
             $table->timestamps();
         });
+
+        
+
+
 
         Schema::create('funding_documents', function (Blueprint $table) {
             $table->id();

@@ -21,6 +21,8 @@ class AuthController extends Controller
     public function getUserProfile()
 {
     $user = auth()->user();
+    $latestRound = $user->rounds()->latest()->first();
+    $totalSharesAvailable = $latestRound ? $latestRound->current_valuation / (1 - ($latestRound->shares_diluted / 100)) : 0;
     
     return response()->json([
         'success' => true,
@@ -35,6 +37,9 @@ class AuthController extends Controller
             'has_experience' => $user->has_experience,
             'sectors' => $user->sectors,
             'rounds' => $user->rounds,
+            'current_valuation' => $latestRound ? $latestRound->current_valuation : null,
+            'total_shares_available' => $totalSharesAvailable,
+            'phone_number' => $user->phone,
         ]
     ], 200);
 }

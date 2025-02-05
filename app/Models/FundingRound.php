@@ -13,6 +13,7 @@ class FundingRound extends Model
 
     const STATUS_CLOSED = 'Closed'; 
     const STATUS_ACTIVE = 'Active';
+    const STATUS_NA = 'NA';
         
 
     protected $fillable = [
@@ -35,7 +36,8 @@ class FundingRound extends Model
         'additional_comments',
         'funding_raised',
         'sequence_number',
-        'approval_status'
+        'approval_status',
+        'admin_rejection_message',
     ];
     protected $casts = [
         'preferred_exit_strategy' => 'array',

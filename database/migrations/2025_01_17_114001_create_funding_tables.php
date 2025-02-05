@@ -33,6 +33,8 @@ return new class extends Migration
             $table->text('additional_comments')->nullable();
             $table->integer('sequence_number');
             $table->string('approval_status')->nullable();
+            $table->text('admin_rejection_message')->nullable();
+
             $table->timestamps();
         });
 

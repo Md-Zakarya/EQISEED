@@ -165,7 +165,8 @@ class FundingController extends Controller
                 $fundingRound->update([
                     'funding_raised' => $roundData['has_not_raised_before'] ? 0 : $roundData['funding_raised'],
                     'form_type' => 'legacy',
-                    'is_active' => false
+                    'is_active' => false,
+                    'current_valuation' => $roundData['has_not_raised_before'] ? 0 : $roundData['valuation_amount'],
                 ]);
 
                 // Update or create funding detail
@@ -335,7 +336,7 @@ class FundingController extends Controller
                 return response()->json([
                     'success' => true,
                     'current_valuation' => 0,
-                    'current_round' => null,
+                    'latest_round' => null,
                     'next_round' => $firstRound?->name
                 ], 200);
             }
@@ -352,7 +353,7 @@ class FundingController extends Controller
             return response()->json([
                 'success' => true,
                 'current_valuation' => $currentValuation,
-                'current_round' => $latestRound->round_type,
+                'latest_round' => $latestRound->round_type,
                 'next_round' => $nextRound?->name
             ], 200);
         } catch (\Exception $e) {

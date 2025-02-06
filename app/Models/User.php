@@ -33,8 +33,16 @@ class User extends Authenticatable
         'has_experience' => 'boolean',
     ];
 
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
 
     public function rounds()
+{
+    return $this->hasMany(FundingRound::class, 'user_id');
+}
+public function fundingRounds()
 {
     return $this->hasMany(FundingRound::class, 'user_id');
 }

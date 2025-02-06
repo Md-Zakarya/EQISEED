@@ -10,7 +10,7 @@ use App\Http\Controllers\FundingInvestorController;
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Admin\AdminFundingController;
 
-Route::middleware([StartSession::class])->group(function () {
+// Route::middleware([StartSession::class])->group(function () {
     Route::post('/send-otp', [OTPController::class, 'sendOTP']);
     Route::post('/verify-otp', [OTPController::class, 'verifyOTP']);
     Route::post('/register', [AuthController::class, 'register']);
@@ -33,7 +33,6 @@ Route::middleware([StartSession::class])->group(function () {
     Route::get('/sectors', function() {
         $sectors = \App\Models\PredefinedSector::orderBy('name')
             ->select('id', 'name')
-            ->orderBy('id')
             ->get();
         return response()->json([
             'success' => true,
@@ -47,7 +46,7 @@ Route::middleware([StartSession::class])->group(function () {
     // Route::post('/funding-rounds', [FundingController::class, 'store']);
     
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'role:user'])->group(function () {
     Route::post('/funding/store-bulk', [FundingController::class, 'storeBulk']);
     Route::get('/funding/round-overview', [FundingController::class, 'getUserRounds']);
     Route::get('/test', function() {
@@ -116,7 +115,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
 
 
-});
+// });
 
 Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
     Route::get('/admin/check', function () {
@@ -127,7 +126,11 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
     Route::patch('/admin/pending-rounds/{fundingRound}/approve', [AdminFundingController::class, 'approveRound']);
     Route::patch('/admin/pending-rounds/{fundingRound}/activate', [AdminFundingController::class, 'activateRound']);
     Route::patch('/admin/pending-rounds/{fundingRound}/close', [AdminFundingController::class, 'closeRound']);
-    Route::patch('/admin/pending-rounds/{fundingRound}/reject', [AdminFundingController::class, 'rejectRound']); 
+    Route::patch('/admin/pending-rounds/{fundingRound}/reject', [AdminFundingController::class, 'rejectRound']);
+    
+    //start-up registered page route.     
+    Route::get('/admin/startups', [AdminFundingController::class, 'getAllStartups']);
+
 
 
 

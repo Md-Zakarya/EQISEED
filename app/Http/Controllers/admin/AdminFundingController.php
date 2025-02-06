@@ -6,67 +6,68 @@ use App\Http\Controllers\Controller;
 use App\Models\FundingRound;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Models\User;
 
 class AdminFundingController extends Controller
 {
-   
-public function getPendingRounds()
-{
-    try {
-        $rounds = FundingRound::with(['fundingDetails', 'user'])
-            ->whereIn('approval_status', [
-                FundingRound::STATUS_PENDING,
-                FundingRound::STATUS_APPROVED, 
-                FundingRound::STATUS_REJECTED
-            ])
-            ->orderBy('created_at', 'desc')
-            ->get()
-            ->map(function ($round) {
-                return [
-                    'id' => $round->id,
-                    'company_name' => $round->user->company_name,
-                    'round_type' => $round->round_type,
-                    'current_valuation' => $round->current_valuation,
-                    'target_amount' => $round->target_amount,
-                    'minimum_investment' => $round->minimum_investment,
-                    'shares_diluted' => $round->shares_diluted,
-                    'date_raised' => $round->created_at->format('Y-m-d'),
-                    'status' => $this->normalizeStatus($round->approval_status),
-                    'comments' => $round->additional_comments,
-                    'rejection_message' => $round->admin_rejection_message
-                ];
-            });
 
-        // Group rounds by their normalized status
-        $groupedRounds = $rounds->groupBy('status')
-            ->map->values()
-            ->toArray();
+    public function getPendingRounds()
+    {
+        try {
+            $rounds = FundingRound::with(['fundingDetails', 'user'])
+                ->whereIn('approval_status', [
+                    FundingRound::STATUS_PENDING,
+                    // FundingRound::STATUS_APPROVED,
+                    // FundingRound::STATUS_REJECTED
+                ])
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->map(function ($round) {
+                    return [
+                        'id' => $round->id,
+                        'company_name' => $round->user->company_name,
+                        'round_type' => $round->round_type,
+                        'current_valuation' => $round->current_valuation,
+                        'target_amount' => $round->target_amount,
+                        'minimum_investment' => $round->minimum_investment,
+                        'shares_diluted' => $round->shares_diluted,
+                        'date_raised' => $round->created_at->format('Y-m-d'),
+                        'status' => $this->normalizeStatus($round->approval_status),
+                        'comments' => $round->additional_comments,
+                        'rejection_message' => $round->admin_rejection_message
+                    ];
+                });
 
-        return response()->json([
-            'success' => true, 
-            'data' => $groupedRounds
-        ], 200);
+            // Group rounds by their normalized status
+            $groupedRounds = $rounds->groupBy('status')
+                ->map->values()
+                ->toArray();
 
-    } catch (\Exception $e) {
-        \Log::error('Error in getPendingRounds: ' . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'message' => 'Error retrieving rounds',
-            'error' => $e->getMessage()
-        ], 500);
+            return response()->json([
+                'success' => true,
+                'data' => $groupedRounds
+            ], 200);
+
+        } catch (\Exception $e) {
+            \Log::error('Error in getPendingRounds: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error retrieving rounds',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
-}
 
-private function normalizeStatus($status)
-{
-    $statusMap = [
-        FundingRound::STATUS_PENDING => 'pending',
-        FundingRound::STATUS_APPROVED => 'approved',
-        FundingRound::STATUS_REJECTED => 'rejected'
-    ];
-    
-    return $statusMap[$status] ?? 'unknown';
-}
+    private function normalizeStatus($status)
+    {
+        $statusMap = [
+            FundingRound::STATUS_PENDING => 'pending',
+            FundingRound::STATUS_APPROVED => 'approved',
+            FundingRound::STATUS_REJECTED => 'rejected'
+        ];
+
+        return $statusMap[$status] ?? 'unknown';
+    }
 
     public function approveRound(FundingRound $fundingRound)
     {
@@ -87,7 +88,7 @@ private function normalizeStatus($status)
 
             return response()->json([
                 'message' => 'Funding round approved successfully',
-                'data' => $fundingRound->fresh()
+
             ]);
 
         } catch (\Exception $e) {
@@ -170,18 +171,18 @@ private function normalizeStatus($status)
         $request->validate([
             'rejection_message' => 'required|string',
         ]);
-        
+
         DB::beginTransaction();
         try {
             $fundingRound = FundingRound::findOrFail($fundingRoundId);
             $fundingRound->update([
-                'approval_status'         => FundingRound::STATUS_REJECTED,
+                'approval_status' => FundingRound::STATUS_REJECTED,
                 'admin_rejection_message' => $request->rejection_message,
             ]);
-    
+
             DB::commit();
             return response()->json([
-                'message'           => 'Funding round rejected successfully.',
+                'message' => 'Funding round rejected successfully.',
                 'admin_rejection_message' => $request->rejection_message
             ]);
         } catch (\Exception $e) {
@@ -189,5 +190,75 @@ private function normalizeStatus($status)
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+
+
+
+    // In AdminFundingController.php
+    public function getAllStartups()
+{
+    \Log::info('getAllStartups: Function called');
+
+    try {
+        \Log::info('getAllStartups: Querying users');
+        $startups = User::where('user_type', '!=', 'admin')
+            ->with([
+                'fundingRounds' => function ($query) {
+                    \Log::info('getAllStartups: Ordering funding rounds by sequence_number');
+                    $query->orderBy('sequence_number');
+                },
+                'fundingRounds.fundingDetails',
+                'fundingRounds.fundingDetails.investors'
+            ])
+            ->get();
+
+        \Log::info('getAllStartups: Users queried', ['count' => $startups->count()]);
+
+        if ($startups->isEmpty()) {
+            \Log::warning('getAllStartups: No startups found');
+            return response()->json([
+                'success' => false,
+                'message' => 'No startups found'
+            ], 404);
+        }
+
+        \Log::info('getAllStartups: Mapping startups data');
+        $startups = $startups->map(function ($user) {
+            \Log::info('getAllStartups: Mapping user', ['user_id' => $user->id]);
+            return [
+                // 'startup' => [
+                    'id' => $user->id,
+                    'company_name' => $user->company_name,
+                    // 'email' => $user->email,
+                    'registration_date' => $user->created_at->format('Y-m-d'),
+                    'sectors' => $user->sectors,
+                // ],
+                'funding_rounds' => $user->fundingRounds->pluck('round_type')->all()
+            ];
+        });
+
+        \Log::info('getAllStartups: Successfully mapped startups data');
+
+        return response()->json([
+            'success' => true,
+            'data' => $startups
+        ], 200);
+
+    } catch (\Exception $e) {
+        \Log::error('Error in getAllStartups: ' . $e->getMessage(), [
+            'exception' => $e,
+            'trace' => $e->getTraceAsString()
+        ]);
+        return response()->json([
+            'success' => false,
+            'message' => 'Error retrieving startups data',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
+
+
+
+
+
 
 }

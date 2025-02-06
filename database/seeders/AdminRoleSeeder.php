@@ -15,6 +15,7 @@ class AdminRoleSeeder extends Seeder
 
         // Create admin role
         Role::create(['name' => 'admin']);
+        Role::create(['name' => 'user']);
         
         // Create admin permissions
         Permission::create(['name' => 'approve rounds']);

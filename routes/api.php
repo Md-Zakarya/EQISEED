@@ -9,6 +9,7 @@ use App\Http\Controllers\FundingController;
 use App\Http\Controllers\FundingInvestorController;
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Admin\AdminFundingController;
+use App\Http\Controllers\admin\predefinedSectorController;
 
 // Route::middleware([StartSession::class])->group(function () {
     Route::post('/send-otp', [OTPController::class, 'sendOTP']);
@@ -43,6 +44,9 @@ use App\Http\Controllers\Admin\AdminFundingController;
 //admin login route
 
     Route::post('/admin/login', [AdminController::class, 'login']);
+
+
+
     // Route::post('/funding-rounds', [FundingController::class, 'store']);
     
 
@@ -85,6 +89,9 @@ Route::middleware(['auth:sanctum', 'role:user'])->group(function () {
 
 
 
+       Route::get('/funding/available-rounds', [FundingController::class, 'getAvailableRounds']);
+
+       Route::get('/funding-investors', [FundingInvestorController::class, 'getAllInvestors']);
 
 
 
@@ -122,6 +129,7 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
         return response()->json(['message' => 'Admin route is working!']);
     });
     Route::get('/admin/pending-rounds', [AdminFundingController::class, 'getPendingRounds']);
+    Route::get('/admin/pending-rounds/{roundId}', [AdminFundingController::class, 'getPendingRoundDetails']);
 
     Route::patch('/admin/pending-rounds/{fundingRound}/approve', [AdminFundingController::class, 'approveRound']);
     Route::patch('/admin/pending-rounds/{fundingRound}/activate', [AdminFundingController::class, 'activateRound']);
@@ -130,6 +138,11 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
     
     //start-up registered page route.     
     Route::get('/admin/startups', [AdminFundingController::class, 'getAllStartups']);
+
+    //sectors page
+    Route::post('/admin/sectors', [PredefinedSectorController::class, 'store']);
+    Route::delete('/admin/sectors/{id}', [PredefinedSectorController::class, 'destroy']);
+    
 
 
 

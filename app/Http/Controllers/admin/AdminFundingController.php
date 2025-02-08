@@ -11,6 +11,56 @@ use App\Models\User;
 class AdminFundingController extends Controller
 {
 
+    public function getPendingRoundDetails($roundId)
+    {
+        try {
+            $fundingRound = FundingRound::with([
+                'user:id,company_name,email',
+                'fundingDetails',
+               
+            ])->findOrFail($roundId);
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'round_info' => [
+                        'id' => $fundingRound->id,
+                        'company_name' => $fundingRound->user->company_name,
+                        'company_email' => $fundingRound->user->email,
+                        'round_type' => $fundingRound->round_type,
+                        'current_valuation' => $fundingRound->current_valuation,
+                        'target_amount' => $fundingRound->target_amount,
+                        'minimum_investment' => $fundingRound->minimum_investment,
+                        'shares_diluted' => $fundingRound->shares_diluted,
+                        'round_opening_date' => $fundingRound->round_opening_date,
+                        'round_closing_date' => $fundingRound->round_closing_date,
+                        'round_duration' => $fundingRound->round_duration,
+                        'grace_period' => $fundingRound->grace_period,
+                        'expected_returns' => $fundingRound->expected_returns,
+                        'preferred_exit_strategy' => $fundingRound->preferred_exit_strategy,
+                        'expected_exit_time' => $fundingRound->expected_exit_time,
+                        'additional_comments' => $fundingRound->additional_comments,
+                        'approval_status' => $fundingRound->approval_status,
+                      
+                    ],
+                    
+                ]
+            ]);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Funding round not found'
+            ], 404);
+        } catch (\Exception $e) {
+            \Log::error('Error in getPendingRoundDetails: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error retrieving round details',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
     public function getPendingRounds()
     {
         try {
@@ -193,68 +243,68 @@ class AdminFundingController extends Controller
 
 
 
-    // In AdminFundingController.php
+
     public function getAllStartups()
-{
-    \Log::info('getAllStartups: Function called');
+    {
+        \Log::info('getAllStartups: Function called');
 
-    try {
-        \Log::info('getAllStartups: Querying users');
-        $startups = User::where('user_type', '!=', 'admin')
-            ->with([
-                'fundingRounds' => function ($query) {
-                    \Log::info('getAllStartups: Ordering funding rounds by sequence_number');
-                    $query->orderBy('sequence_number');
-                },
-                'fundingRounds.fundingDetails',
-                'fundingRounds.fundingDetails.investors'
-            ])
-            ->get();
+        try {
+            \Log::info('getAllStartups: Querying users');
+            $startups = User::where('user_type', '!=', 'admin')
+                ->with([
+                    'fundingRounds' => function ($query) {
+                        \Log::info('getAllStartups: Ordering funding rounds by sequence_number');
+                        $query->orderBy('sequence_number');
+                    },
+                    'fundingRounds.fundingDetails',
+                    'fundingRounds.fundingDetails.investors'
+                ])
+                ->get();
 
-        \Log::info('getAllStartups: Users queried', ['count' => $startups->count()]);
+            \Log::info('getAllStartups: Users queried', ['count' => $startups->count()]);
 
-        if ($startups->isEmpty()) {
-            \Log::warning('getAllStartups: No startups found');
-            return response()->json([
-                'success' => false,
-                'message' => 'No startups found'
-            ], 404);
-        }
+            if ($startups->isEmpty()) {
+                \Log::warning('getAllStartups: No startups found');
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No startups found'
+                ], 404);
+            }
 
-        \Log::info('getAllStartups: Mapping startups data');
-        $startups = $startups->map(function ($user) {
-            \Log::info('getAllStartups: Mapping user', ['user_id' => $user->id]);
-            return [
-                // 'startup' => [
+            \Log::info('getAllStartups: Mapping startups data');
+            $startups = $startups->map(function ($user) {
+                \Log::info('getAllStartups: Mapping user', ['user_id' => $user->id]);
+                return [
+                    // 'startup' => [
                     'id' => $user->id,
                     'company_name' => $user->company_name,
                     // 'email' => $user->email,
                     'registration_date' => $user->created_at->format('Y-m-d'),
                     'sectors' => $user->sectors,
-                // ],
-                'funding_rounds' => $user->fundingRounds->pluck('round_type')->all()
-            ];
-        });
+                    // ],
+                    'funding_rounds' => $user->fundingRounds->pluck('round_type')->all()
+                ];
+            });
 
-        \Log::info('getAllStartups: Successfully mapped startups data');
+            \Log::info('getAllStartups: Successfully mapped startups data');
 
-        return response()->json([
-            'success' => true,
-            'data' => $startups
-        ], 200);
+            return response()->json([
+                'success' => true,
+                'data' => $startups
+            ], 200);
 
-    } catch (\Exception $e) {
-        \Log::error('Error in getAllStartups: ' . $e->getMessage(), [
-            'exception' => $e,
-            'trace' => $e->getTraceAsString()
-        ]);
-        return response()->json([
-            'success' => false,
-            'message' => 'Error retrieving startups data',
-            'error' => $e->getMessage()
-        ], 500);
+        } catch (\Exception $e) {
+            \Log::error('Error in getAllStartups: ' . $e->getMessage(), [
+                'exception' => $e,
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Error retrieving startups data',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
-}
 
 
 

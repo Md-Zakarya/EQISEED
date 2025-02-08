@@ -240,81 +240,102 @@ class FundingController extends Controller
 
 
     public function newRound(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            //    'round_type' => 'required|string',
-            'round_type' => 'required|string|unique:funding_rounds,round_type,NULL,id,user_id,' . auth()->id(),
-            'current_valuation' => 'required|numeric',
-            'shares_diluted' => 'required|numeric|between:0,100',
-            'target_amount' => 'required|numeric',
-            'minimum_investment' => 'required|numeric',
-            'round_opening_date' => 'required|date',
-            'round_duration' => 'required|in:7,14,21',
-            'grace_period' => 'required|in:3,5,7',
-            'preferred_exit_strategy.*' => 'string',
-            'expected_exit_time' => 'required|in:3-5,5-7,7-9',
-            'expected_returns' => 'required|numeric',
-            'additional_comments' => 'nullable|string',
-        ]);
+{
+    $existingRound = FundingRound::where('user_id', auth()->id())
+        ->where('round_type', $request->round_type)
+        ->first();
 
-        if ($validator->fails()) {
-            return response()->json([
-                'status' => 'error',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
-        try {
-            DB::beginTransaction();
-
-            $sequence = FundingRound::where('user_id', auth()->id())->count() + 1;
-            $closingDate = date('Y-m-d', strtotime($request->round_opening_date . ' + ' . $request->round_duration . ' days'));
-
-            $fundingRound = FundingRound::create([
-                'user_id' => auth()->id(),
-                'form_type' => 'new',  // Mark as new form
-                'round_type' => $request->round_type,
-                'isRaisedFromEquiseed' => true,
-                'current_valuation' => $request->current_valuation,
-                'shares_diluted' => $request->shares_diluted,
-                'target_amount' => $request->target_amount,
-                'minimum_investment' => $request->minimum_investment,
-                'round_opening_date' => $request->round_opening_date,
-                'round_duration' => $request->round_duration,
-                'grace_period' => $request->grace_period,
-                'preferred_exit_strategy' => $request->preferred_exit_strategy,
-                'expected_exit_time' => $request->expected_exit_time,
-                'expected_returns' => $request->expected_returns,
-                'additional_comments' => $request->additional_comments,
-                'round_closing_date' => $closingDate,
-                'sequence_number' => $sequence,
-                'approval_status' => FundingRound::STATUS_PENDING
-            ]);
-
-            $fundingDetail = $fundingRound->fundingDetails()->create([
-                'valuation_amount' => $request->current_valuation,
-                'funding_date' => $request->round_opening_date,
-                'has_not_raised_before' => false,
-                'equity_diluted' => 0,
-
-            ]);
-
-            DB::commit();
-
-            return response()->json([
-                'status' => 'success',
-                'message' => 'New funding round created successfully',
-                'data' => $fundingRound
-            ], 201);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Failed to create funding round',
-                'error' => $e->getMessage()
-            ], 500);
-        }
+    if ($existingRound && $existingRound->approval_status !== FundingRound::STATUS_REJECTED) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'This round type already exists and is not rejected'
+        ], 422);
     }
+
+    $validator = Validator::make($request->all(), [
+        'round_type' => 'required|string',
+        'current_valuation' => 'required|numeric',
+        'shares_diluted' => 'required|numeric|between:0,100',
+        'target_amount' => 'required|numeric',
+        'minimum_investment' => 'required|numeric',
+        'round_opening_date' => 'required|date',
+        'round_duration' => 'required|in:7,14,21',
+        'grace_period' => 'required|in:3,5,7',
+        'preferred_exit_strategy.*' => 'string',
+        'expected_exit_time' => 'required|in:3-5,5-7,7-9',
+        'expected_returns' => 'required|numeric',
+        'additional_comments' => 'nullable|string',
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'status' => 'error',
+            'errors' => $validator->errors()
+        ], 422);
+    }
+
+    try {
+        DB::beginTransaction();
+
+        $closingDate = date('Y-m-d', strtotime($request->round_opening_date . ' + ' . $request->round_duration . ' days'));
+        $roundData = [
+            'user_id' => auth()->id(),
+            'form_type' => 'new',
+            'round_type' => $request->round_type,
+            'isRaisedFromEquiseed' => true,
+            'current_valuation' => $request->current_valuation,
+            'shares_diluted' => $request->shares_diluted,
+            'target_amount' => $request->target_amount,
+            'minimum_investment' => $request->minimum_investment,
+            'round_opening_date' => $request->round_opening_date,
+            'round_duration' => $request->round_duration,
+            'grace_period' => $request->grace_period,
+            'preferred_exit_strategy' => $request->preferred_exit_strategy,
+            'expected_exit_time' => $request->expected_exit_time,
+            'expected_returns' => $request->expected_returns,
+            'additional_comments' => $request->additional_comments,
+            'round_closing_date' => $closingDate,
+            'approval_status' => FundingRound::STATUS_PENDING
+        ];
+
+        $fundingDetailsData = [
+            'valuation_amount' => $request->current_valuation,
+            'funding_date' => $request->round_opening_date,
+            'has_not_raised_before' => false,
+            'equity_diluted' => 0
+        ];
+
+        if ($existingRound) {
+            // Update existing rejected round
+            $roundData['admin_rejection_message'] = null;
+            $existingRound->update($roundData);
+            $existingRound->fundingDetails()->update($fundingDetailsData);
+            $fundingRound = $existingRound;
+        } else {
+            // Create new round
+            $sequence = FundingRound::where('user_id', auth()->id())->count() + 1;
+            $roundData['sequence_number'] = $sequence;
+            $fundingRound = FundingRound::create($roundData);
+            $fundingRound->fundingDetails()->create($fundingDetailsData);
+        }
+
+        DB::commit();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $existingRound ? 'Funding round resubmitted successfully' : 'New funding round created successfully',
+            'data' => $fundingRound
+        ], 201);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Failed to process funding round',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
 
 
     public function getLatestCurrentValuation()
@@ -374,140 +395,140 @@ class FundingController extends Controller
 
 
     private function findNextRound(string $currentRoundType): ?PredefinedRound
-{
-    try {
-        Log::info('Starting findNextRound function', ['current_round_type' => $currentRoundType]);
+    {
+        try {
+            Log::info('Starting findNextRound function', ['current_round_type' => $currentRoundType]);
 
-        // Normalize the current round type
-        $normalizedCurrentRound = $this->normalizeRoundName($currentRoundType);
-        Log::info('Normalized current round type', ['normalized_current_round' => $normalizedCurrentRound]);
+            // Normalize the current round type
+            $normalizedCurrentRound = $this->normalizeRoundName($currentRoundType);
+            Log::info('Normalized current round type', ['normalized_current_round' => $normalizedCurrentRound]);
 
-        // Get sorted predefined rounds
-        $predefinedRounds = PredefinedRound::orderBy('sequence')->get();
-        Log::info('Retrieved predefined rounds', ['predefined_rounds_count' => $predefinedRounds->count()]);
+            // Get sorted predefined rounds
+            $predefinedRounds = PredefinedRound::orderBy('sequence')->get();
+            Log::info('Retrieved predefined rounds', ['predefined_rounds_count' => $predefinedRounds->count()]);
 
-        // Find current round
-        $currentRound = $predefinedRounds->filter(function ($round) use ($normalizedCurrentRound) {
-            $normalizedRoundName = $this->normalizeRoundName($round->name);
-            Log::debug('Comparing predefined round', [
-                'predefined_round_name' => $round->name,
-                'normalized_predefined_round_name' => $normalizedRoundName,
-                'normalized_current_round' => $normalizedCurrentRound
-            ]);
-            return $normalizedRoundName === $normalizedCurrentRound;
-        })->first();
-
-        Log::info('Current round search result', ['current_round_found' => $currentRound ? true : false]);
-
-        // Get all rounds raised by the user
-        $userRounds = FundingRound::where('user_id', auth()->id())
-            ->orderBy('sequence_number')
-            ->get();
-        Log::info('Retrieved user rounds', ['user_rounds_count' => $userRounds->count(), 'user_rounds' => $userRounds->toArray()]);
-
-        // Extract normalized names of raised rounds
-        $raisedRounds = $userRounds->map(function ($round) {
-            return $this->normalizeRoundName($round->round_type);
-        })->toArray();
-        Log::info('Raised rounds', ['raised_rounds' => $raisedRounds]);
-
-        if (!$currentRound) {
-            Log::info('Current round is not predefined, searching in user rounds');
-
-            // If current round is not predefined, find the last predefined round 
-            // with sequence less than current round's sequence
-            $lastPredefinedRound = null;
-            foreach ($userRounds as $round) {
-                Log::info('Processing user round', [
-                    'round_id' => $round->id,
-                    'round_type' => $round->round_type
+            // Find current round
+            $currentRound = $predefinedRounds->filter(function ($round) use ($normalizedCurrentRound) {
+                $normalizedRoundName = $this->normalizeRoundName($round->name);
+                Log::debug('Comparing predefined round', [
+                    'predefined_round_name' => $round->name,
+                    'normalized_predefined_round_name' => $normalizedRoundName,
+                    'normalized_current_round' => $normalizedCurrentRound
                 ]);
+                return $normalizedRoundName === $normalizedCurrentRound;
+            })->first();
 
-                $normalizedRoundType = $this->normalizeRoundName($round->round_type);
-                Log::debug('Normalized round type', [
-                    'original' => $round->round_type,
-                    'normalized' => $normalizedRoundType
-                ]);
+            Log::info('Current round search result', ['current_round_found' => $currentRound ? true : false]);
 
-                $predefinedRound = $predefinedRounds->filter(function ($round) use ($normalizedRoundType) {
-                    $normalizedPredefinedRoundName = $this->normalizeRoundName($round->name);
-                    Log::debug('Comparing user round with predefined round', [
-                        'user_round_normalized' => $normalizedRoundType,
-                        'predefined_round_normalized' => $normalizedPredefinedRoundName
-                    ]);
-                    return $normalizedPredefinedRoundName === $normalizedRoundType;
-                })->first();
-                Log::debug('Predefined round lookup result', [
-                    'found' => $predefinedRound ? true : false,
-                    'predefined_name' => $predefinedRound ? $predefinedRound->name : null,
-                    'sequence' => $predefinedRound ? $predefinedRound->sequence : null
-                ]);
+            // Get all rounds raised by the user
+            $userRounds = FundingRound::where('user_id', auth()->id())
+                ->orderBy('sequence_number')
+                ->get();
+            Log::info('Retrieved user rounds', ['user_rounds_count' => $userRounds->count(), 'user_rounds' => $userRounds->toArray()]);
 
-                if ($predefinedRound) {
-                    $lastPredefinedRound = $predefinedRound;
-                    Log::info('Updated last predefined round', [
+            // Extract normalized names of raised rounds
+            $raisedRounds = $userRounds->map(function ($round) {
+                return $this->normalizeRoundName($round->round_type);
+            })->toArray();
+            Log::info('Raised rounds', ['raised_rounds' => $raisedRounds]);
+
+            if (!$currentRound) {
+                Log::info('Current round is not predefined, searching in user rounds');
+
+                // If current round is not predefined, find the last predefined round 
+                // with sequence less than current round's sequence
+                $lastPredefinedRound = null;
+                foreach ($userRounds as $round) {
+                    Log::info('Processing user round', [
                         'round_id' => $round->id,
-                        'predefined_name' => $predefinedRound->name,
-                        'sequence' => $predefinedRound->sequence
+                        'round_type' => $round->round_type
                     ]);
+
+                    $normalizedRoundType = $this->normalizeRoundName($round->round_type);
+                    Log::debug('Normalized round type', [
+                        'original' => $round->round_type,
+                        'normalized' => $normalizedRoundType
+                    ]);
+
+                    $predefinedRound = $predefinedRounds->filter(function ($round) use ($normalizedRoundType) {
+                        $normalizedPredefinedRoundName = $this->normalizeRoundName($round->name);
+                        Log::debug('Comparing user round with predefined round', [
+                            'user_round_normalized' => $normalizedRoundType,
+                            'predefined_round_normalized' => $normalizedPredefinedRoundName
+                        ]);
+                        return $normalizedPredefinedRoundName === $normalizedRoundType;
+                    })->first();
+                    Log::debug('Predefined round lookup result', [
+                        'found' => $predefinedRound ? true : false,
+                        'predefined_name' => $predefinedRound ? $predefinedRound->name : null,
+                        'sequence' => $predefinedRound ? $predefinedRound->sequence : null
+                    ]);
+
+                    if ($predefinedRound) {
+                        $lastPredefinedRound = $predefinedRound;
+                        Log::info('Updated last predefined round', [
+                            'round_id' => $round->id,
+                            'predefined_name' => $predefinedRound->name,
+                            'sequence' => $predefinedRound->sequence
+                        ]);
+                    }
                 }
+
+                if ($lastPredefinedRound) {
+                    Log::info('Last predefined round found in user sequence', [
+                        'last_predefined_round_name' => $lastPredefinedRound->name,
+                        'last_predefined_round_sequence' => $lastPredefinedRound->sequence
+                    ]);
+
+                    // Get next predefined round after the last known predefined round
+                    // Skip rounds that have already been raised
+                    $nextRound = $predefinedRounds
+                        ->where('sequence', '>', $lastPredefinedRound->sequence)
+                        ->filter(function ($round) use ($raisedRounds) {
+                            return !in_array($this->normalizeRoundName($round->name), $raisedRounds);
+                        })
+                        ->first();
+
+                    Log::info('Next round after last predefined round', [
+                        'next_round_found' => $nextRound ? true : false,
+                        'next_round_name' => $nextRound ? $nextRound->name : 'none'
+                    ]);
+
+                    return $nextRound;
+                }
+
+                // If no predefined round found in sequence, return first predefined round
+                Log::info('No predefined round found in user sequence, returning first predefined round');
+                return $predefinedRounds->first();
             }
 
-            if ($lastPredefinedRound) {
-                Log::info('Last predefined round found in user sequence', [
-                    'last_predefined_round_name' => $lastPredefinedRound->name,
-                    'last_predefined_round_sequence' => $lastPredefinedRound->sequence
-                ]);
+            // Get next round in regular predefined sequence
+            // Skip rounds that have already been raised
+            $nextRound = $predefinedRounds
+                ->where('sequence', '>', $currentRound->sequence)
+                ->filter(function ($round) use ($raisedRounds) {
+                    return !in_array($this->normalizeRoundName($round->name), $raisedRounds);
+                })
+                ->first();
 
-                // Get next predefined round after the last known predefined round
-                // Skip rounds that have already been raised
-                $nextRound = $predefinedRounds
-                    ->where('sequence', '>', $lastPredefinedRound->sequence)
-                    ->filter(function ($round) use ($raisedRounds) {
-                        return !in_array($this->normalizeRoundName($round->name), $raisedRounds);
-                    })
-                    ->first();
+            Log::info('Next round in predefined sequence', [
+                'current_round_name' => $currentRound->name,
+                'current_round_sequence' => $currentRound->sequence,
+                'next_round_found' => $nextRound ? true : false,
+                'next_round_name' => $nextRound ? $nextRound->name : 'none'
+            ]);
 
-                Log::info('Next round after last predefined round', [
-                    'next_round_found' => $nextRound ? true : false,
-                    'next_round_name' => $nextRound ? $nextRound->name : 'none'
-                ]);
+            return $nextRound;
 
-                return $nextRound;
-            }
-
-            // If no predefined round found in sequence, return first predefined round
-            Log::info('No predefined round found in user sequence, returning first predefined round');
-            return $predefinedRounds->first();
+        } catch (\Exception $e) {
+            Log::error('Error in findNextRound', [
+                'current_round_type' => $currentRoundType,
+                'error_message' => $e->getMessage(),
+                'error_trace' => $e->getTraceAsString()
+            ]);
+            return null;
         }
-
-        // Get next round in regular predefined sequence
-        // Skip rounds that have already been raised
-        $nextRound = $predefinedRounds
-            ->where('sequence', '>', $currentRound->sequence)
-            ->filter(function ($round) use ($raisedRounds) {
-                return !in_array($this->normalizeRoundName($round->name), $raisedRounds);
-            })
-            ->first();
-
-        Log::info('Next round in predefined sequence', [
-            'current_round_name' => $currentRound->name,
-            'current_round_sequence' => $currentRound->sequence,
-            'next_round_found' => $nextRound ? true : false,
-            'next_round_name' => $nextRound ? $nextRound->name : 'none'
-        ]);
-
-        return $nextRound;
-
-    } catch (\Exception $e) {
-        Log::error('Error in findNextRound', [
-            'current_round_type' => $currentRoundType,
-            'error_message' => $e->getMessage(),
-            'error_trace' => $e->getTraceAsString()
-        ]);
-        return null;
     }
-}
 
 
 
@@ -516,20 +537,20 @@ class FundingController extends Controller
 
 
 
-//     private function findNextRound(string $currentRoundType): ?PredefinedRound
+    //     private function findNextRound(string $currentRoundType): ?PredefinedRound
 // {
 //     try {
 //         Log::info('Starting findNextRound function', ['current_round_type' => $currentRoundType]);
 
-//         // Normalize the current round type
+    //         // Normalize the current round type
 //         $normalizedCurrentRound = $this->normalizeRoundName($currentRoundType);
 //         Log::info('Normalized current round type', ['normalized_current_round' => $normalizedCurrentRound]);
 
-//         // Get sorted predefined rounds
+    //         // Get sorted predefined rounds
 //         $predefinedRounds = PredefinedRound::orderBy('sequence')->get();
 //         Log::info('Retrieved predefined rounds', ['predefined_rounds_count' => $predefinedRounds->count()]);
 
-//         // Find current round
+    //         // Find current round
 //         $currentRound = $predefinedRounds->filter(function ($round) use ($normalizedCurrentRound) {
 //             $normalizedRoundName = $this->normalizeRoundName($round->name);
 //             Log::debug('Comparing predefined round', [
@@ -540,23 +561,23 @@ class FundingController extends Controller
 //             return $normalizedRoundName === $normalizedCurrentRound;
 //         })->first();
 
-//         // if (!$currentRound) {
+    //         // if (!$currentRound) {
 //         //     Log::info('No current round found. Returning the first predefined round as next round.');
 //         //     return $predefinedRounds->first();
 //         // }
 //         Log::info('Current round search result', ['current_round_found' => $currentRound ? true : false]);
 
-//         if (!$currentRound) {
+    //         if (!$currentRound) {
 //             Log::info('Current round is not predefined, searching in user rounds');
 
-//             // If current round is not predefined, find the last predefined round 
+    //             // If current round is not predefined, find the last predefined round 
 //             // with sequence less than current round's sequence
 //             $userRounds = FundingRound::where('user_id', auth()->id())
 //                 ->orderBy('sequence_number')
 //                 ->get();
 //             Log::info('Retrieved user rounds', ['user_rounds_count' => $userRounds->count(), 'user_rounds' => $userRounds->toArray()]);
 
-//             // Find the last predefined round in user's sequence
+    //             // Find the last predefined round in user's sequence
 //             $lastPredefinedRound = null;
 //             foreach ($userRounds as $round) {
 //                 Log::info('Processing user round', [
@@ -564,13 +585,13 @@ class FundingController extends Controller
 //                     'round_type' => $round->round_type
 //                 ]);
 
-//                 $normalizedRoundType = $this->normalizeRoundName($round->round_type);
+    //                 $normalizedRoundType = $this->normalizeRoundName($round->round_type);
 //                 Log::debug('Normalized round type', [
 //                     'original' => $round->round_type,
 //                     'normalized' => $normalizedRoundType
 //                 ]);
 
-//                 $predefinedRound = $predefinedRounds->filter(function ($round) use ($normalizedRoundType) {
+    //                 $predefinedRound = $predefinedRounds->filter(function ($round) use ($normalizedRoundType) {
 //                     $normalizedPredefinedRoundName = $this->normalizeRoundName($round->name);
 //                     Log::debug('Comparing user round with predefined round', [
 //                         'user_round_normalized' => $normalizedRoundType,
@@ -584,7 +605,7 @@ class FundingController extends Controller
 //                     'sequence' => $predefinedRound ? $predefinedRound->sequence : null
 //                 ]);
 
-//                 if ($predefinedRound) {
+    //                 if ($predefinedRound) {
 //                     $lastPredefinedRound = $predefinedRound;
 //                     Log::info('Updated last predefined round', [
 //                         'round_id' => $round->id,
@@ -594,45 +615,45 @@ class FundingController extends Controller
 //                 }
 //             }
 
-//             if ($lastPredefinedRound) {
+    //             if ($lastPredefinedRound) {
 //                 Log::info('Last predefined round found in user sequence', [
 //                     'last_predefined_round_name' => $lastPredefinedRound->name,
 //                     'last_predefined_round_sequence' => $lastPredefinedRound->sequence
 //                 ]);
 
-//                 // Get next predefined round after the last known predefined round
+    //                 // Get next predefined round after the last known predefined round
 //                 $nextRound = $predefinedRounds
 //                     ->where('sequence', '>', $lastPredefinedRound->sequence)
 //                     ->first();
 
-//                 Log::info('Next round after last predefined round', [
+    //                 Log::info('Next round after last predefined round', [
 //                     'next_round_found' => $nextRound ? true : false,
 //                     'next_round_name' => $nextRound ? $nextRound->name : 'none'
 //                 ]);
 
-//                 return $nextRound;
+    //                 return $nextRound;
 //             }
 
-//             // If no predefined round found in sequence, return first predefined round
+    //             // If no predefined round found in sequence, return first predefined round
 //             Log::info('No predefined round found in user sequence, returning first predefined round');
 //             return $predefinedRounds->first();
 //         }
 
-//         // Get next round in regular predefined sequence
+    //         // Get next round in regular predefined sequence
 //         $nextRound = $predefinedRounds
 //             ->where('sequence', '>', $currentRound->sequence)
 //             ->first();
 
-//         Log::info('Next round in predefined sequence', [
+    //         Log::info('Next round in predefined sequence', [
 //             'current_round_name' => $currentRound->name,
 //             'current_round_sequence' => $currentRound->sequence,
 //             'next_round_found' => $nextRound ? true : false,
 //             'next_round_name' => $nextRound ? $nextRound->name : 'none'
 //         ]);
 
-//         return $nextRound;
+    //         return $nextRound;
 
-//     } catch (\Exception $e) {
+    //     } catch (\Exception $e) {
 //         Log::error('Error in findNextRound', [
 //             'current_round_type' => $currentRoundType,
 //             'error_message' => $e->getMessage(),
@@ -746,7 +767,7 @@ class FundingController extends Controller
     public function rejectRound($fundingRoundId)
     {
         $fundingRound = FundingRound::findOrFail($fundingRoundId);
-        $fundingRound->status = 'rejected';
+        $fundingRound->approval_status = FundingRound::STATUS_REJECTED;
         $fundingRound->save();
 
         return response()->json(['message' => 'Funding round rejected successfully.']);
@@ -849,7 +870,8 @@ class FundingController extends Controller
                     'approval_status' => $fundingRound->approval_status,
                     'sequence_number' => $fundingRound->sequence_number,
                     'is_active' => $fundingRound->is_active,
-                    'round_closing_date' => $fundingRound->round_closing_date
+                    'round_closing_date' => $fundingRound->round_closing_date,
+                    'rejection_message' => $fundingRound->admin_rejection_message
                 ];
             }
 
@@ -872,6 +894,66 @@ class FundingController extends Controller
             ], 500);
         }
     }
+
+
+
+    public function getAvailableRounds()
+    {
+        try {
+            $userId = auth()->id();
+    
+            // Get user's existing rounds
+            $userRounds = FundingRound::where('user_id', $userId)
+                ->orderBy('sequence_number')
+                ->get();
+    
+            // Get all predefined rounds
+            $predefinedRounds = PredefinedRound::orderBy('sequence')->get();
+    
+            // Find latest predefined sequence number for user's raised rounds 
+            $latestPredefinedSequence = 0;
+            foreach ($userRounds as $userRound) {
+                $matchingPredefined = $predefinedRounds->first(function($pr) use ($userRound) {
+                    return $this->normalizeRoundName($pr->name) === $this->normalizeRoundName($userRound->round_type);
+                });
+                if ($matchingPredefined && $matchingPredefined->sequence > $latestPredefinedSequence) {
+                    $latestPredefinedSequence = $matchingPredefined->sequence;
+                }
+            }
+    
+            // Get available rounds after the latest predefined sequence
+            $availableRounds = $predefinedRounds
+                ->where('sequence', '>', $latestPredefinedSequence)
+                ->values()
+                ->pluck('name')
+                ->toArray();
+    
+            // Set available_rounds to null if empty
+            $availableRounds = !empty($availableRounds) ? $availableRounds : null;
+    
+            // Get raised rounds
+            $raisedRounds = $userRounds->pluck('round_type')->toArray();
+    
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'available_rounds' => $availableRounds,
+                    'raised_rounds' => $raisedRounds
+                ]
+            ]);
+    
+        } catch (\Exception $e) {
+            Log::error('Error getting rounds: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error retrieving rounds',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+
 
 
 }
